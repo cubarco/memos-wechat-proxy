@@ -22,4 +22,8 @@ docker build -t memos-proxy .
 docker tag memos-proxy zhaoweiping/memos-proxy
 docker push zhaoweiping/memos-proxy
 ```
+# TODO
 
+- [ ] 支持语音
+- [ ] 支持视频
+- [ ] 支持自定义默认标签
