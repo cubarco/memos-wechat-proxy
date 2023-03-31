@@ -7,18 +7,18 @@
 # 启动
 
 
-## 1. docker
+## 预先准备
+在`/root/memos-wechat-proxy`中创建`config.ini`, 并把`config_demo.ini`中全部内容复制进去
+
+## 创建容器
 ```bash
-docker run -d -p 5000:5000  -v "~/memos-wechat-proxy/config.ini:/app/config.ini" --name memos-wechat-proxy lclrc/memos-wechat-proxy
+docker run -d -p 5000:5000  -v "/root/memos-wechat-proxy/config.ini:/app/config.ini" --name memos-wechat-proxy lclrc/memos-wechat-proxy
 ```
 
-## 2. docker-compose
-
-
 ## 设置
-1. 在`~/memos-wechat-proxy`中创建`config.ini`, 并把`config_demo.ini`中全部内容复制进去
-2. 根据Memos和公众号修改`config.ini`中的设置(可以适当参考原repo文档)
-3. 重启容器
+1. 根据Memos和公众号修改`config.ini`中的设置(可以适当参考原repo文档)
+2. 重启容器
+3. 根据配置文件内的注释修改`wechat_open_id`, 重启容器
 
 
 # 构建
