@@ -24,6 +24,7 @@ docker push zhaoweiping/memos-proxy
 ```
 # TODO
 
+- [ ] 修复图片
 - [ ] 支持语音
 - [ ] 支持视频
 - [ ] 支持自定义默认标签
