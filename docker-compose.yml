@@ -1,10 +1,11 @@
 version: '3'
 
 services:
-  memos:
-    image: lclrc/memos-wechat-proxy:latest
+  memos-wechat-proxy:
+    build: .
     container_name: memos-wechat-proxy
     ports:
       - 5000:5000
     volumes:
-      - /root/memos-wechat-proxy/config.ini:/app/config.ini
+      - ./config.ini:/app/config.ini
+    stop_signal: SIGINT

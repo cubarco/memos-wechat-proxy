@@ -11,7 +11,7 @@ import configparser
 import urllib.request
 import os
 import filetype
-from threading import Timer
+from threading import Timer, Thread
 
 file = 'config.ini'
 con = configparser.ConfigParser()
@@ -41,6 +41,8 @@ def wexin():
 
         token = con.get('prod', 'wechat_token')  # 微信公众号的token
         data = [token, my_timestamp, my_nonce]
+        if not all(data):
+            return ''
         data.sort()
         temp = ''.join(data)
         s = hashlib.sha1()
@@ -53,7 +55,6 @@ def wexin():
     else:
         xml = ET.fromstring(request.data)
 
-        global access_token, default_tag_data
         toUser = xml.find('ToUserName').text
         fromUser = xml.find('FromUserName').text
         msgType = xml.find("MsgType").text
@@ -70,40 +71,61 @@ def wexin():
             content = xml.find('Content').text
             if content == r"【收到不支持的消息类型，暂无法显示】":
                 return reply_text(fromUser, toUser, "不支持的类型..\n微信支持发送除gif以外的图片/文字/语音/链接分享卡片/视频")
-            memos_response_id = memos_post_api(content)
-        elif msgType == "image":
-            content1 = xml.find('PicUrl').text
-            content2 = xml.find('MediaId').text
-            img_name, img_path = wechat_image(content1, content2)
-            resource_id, filename = memos_post_file_api(img_name, img_path)
-            memos_response_id = memos_post_multipart_api(msgType, resource_id)
-        elif msgType == "voice":
-            content = xml.find('Recognition').text
-            mediaid = xml.find('MediaId').text
-            voice_name, voice_path = wechat_voice(mediaid)
-            resource_id, filename = memos_post_file_api(voice_name, voice_path)
-            memos_response_id = memos_post_multipart_api(msgType, resource_id, content)
-        elif msgType == "video":
-            thumb_mediaid = xml.find('ThumbMediaId').text
-            mediaid = xml.find('MediaId').text
-            video_name, video_path = wechat_video(mediaid)
-            resource_id, filename = memos_post_file_api(video_name, video_path)
-            memos_response_id = memos_post_multipart_api(msgType, resource_id)
-        elif msgType == "link":
-            link_title = xml.find('Title').text
-            link_description = xml.find('Description').text
-            link_url = xml.find('Url').text
-            content = "%s\n%s\n%s\n%s" % (
-                link_title, link_description, link_url, default_tag_data)
-            memos_response_id = memos_post_api(content)
-        else:
-            return reply_text(fromUser, toUser, "不支持的类型..微信只支持发送除gif以外的图片/文字/语音/链接分享卡片")
+        elif msgType not in ['image', 'voice', 'video', 'link']:
+            return reply_text(fromUser, toUser, f"不支持的类型: {msgType}\n微信只支持发送除gif以外的图片/文字/语音/链接分享卡片/视频")
 
-        if len(str(memos_response_id)) != "":
-            return reply_text(fromUser, toUser, "%s") % (con.get('prod', 'messages_success'))
-        else:
-            return reply_text(fromUser, toUser, "%s").format(con.get('prod', 'messages_failed'))
+        # 图片消息上传较慢，此处多线程执行，微信如果5秒内收不到返回会重试
+        Thread(target=do_upload, args=(xml,)).start()
 
+        return reply_text(fromUser, toUser, "%s") % (con.get('prod', 'messages_success'))
+
+
+def do_upload(xml):
+    global default_tag_data
+    toUser = xml.find('ToUserName').text
+    fromUser = xml.find('FromUserName').text
+    msgType = xml.find("MsgType").text
+    createTime = xml.find("CreateTime")
+
+    memos_response_id = ""
+    if msgType == "text":
+        content = xml.find('Content').text
+        if content == r"【收到不支持的消息类型，暂无法显示】":
+            return reply_text(fromUser, toUser, "不支持的类型..\n微信支持发送除gif以外的图片/文字/语音/链接分享卡片/视频")
+        memos_response_id = memos_post_api(content)
+    elif msgType == "image":
+        content1 = xml.find('PicUrl').text
+        content2 = xml.find('MediaId').text
+        img_name, img_path = wechat_image(content1, content2)
+        resource_id, filename = memos_post_file_api(img_name, img_path)
+        memos_response_id = memos_post_multipart_api(msgType, resource_id)
+    elif msgType == "voice":
+        # content = xml.find('Recognition').text
+        content = 'voice'
+        mediaid = xml.find('MediaId').text
+        voice_name, voice_path = wechat_voice(mediaid)
+        resource_id, filename = memos_post_file_api(voice_name, voice_path)
+        memos_response_id = memos_post_multipart_api(msgType, resource_id, content)
+    elif msgType == "video":
+        thumb_mediaid = xml.find('ThumbMediaId').text
+        mediaid = xml.find('MediaId').text
+        video_name, video_path = wechat_video(mediaid)
+        resource_id, filename = memos_post_file_api(video_name, video_path)
+        memos_response_id = memos_post_multipart_api(msgType, resource_id)
+    elif msgType == "link":
+        link_title = xml.find('Title').text
+        link_description = xml.find('Description').text
+        link_url = xml.find('Url').text
+        content = "%s\n%s\n%s\n%s" % (
+            link_title, link_description, link_url, default_tag_data)
+        memos_response_id = memos_post_api(content)
+    else:
+        return reply_text(fromUser, toUser, "不支持的类型..\b微信只支持发送除gif以外的图片/文字/语音/链接分享卡片/视频")
+
+    if len(str(memos_response_id)) != "":
+        return reply_text(fromUser, toUser, "%s") % (con.get('prod', 'messages_success'))
+    else:
+        return reply_text(fromUser, toUser, "%s").format(con.get('prod', 'messages_failed'))
 
 def memos_post_api(content):
     """
@@ -119,9 +141,9 @@ def memos_post_api(content):
         'Authorization': f'Bearer {memos_accesstoken}',
         'Content-Type': 'application/json'
     }
-    response = requests.request("POST", url, headers=headers, data=payload)
-    r1 = json.loads(response.text)
-    return r1["data"]["id"]
+    response = requests.post(url, headers=headers, data=payload)
+    result = response.json()
+    return result["id"]
 
 
 def reply_text(to_user, from_user, content):
@@ -214,12 +236,11 @@ def memos_post_file_api(file_name, file_path):
         'Authorization': f'Bearer {memos_accesstoken}',
     }
 
-    response = requests.request(
-        "POST", url, headers=headers, data=payload, files=files)
+    response = requests.post(url, headers=headers, data=payload, files=files)
 
     del_local_file(file_path)
-    res_json = json.loads(response.text)
-    return res_json["data"]["id"], res_json["data"]["filename"]
+    res_json = response.json()
+    return res_json["id"], res_json["filename"]
 
 
 def memos_post_multipart_api(msgType, resource_id, content=""):
@@ -237,8 +258,8 @@ def memos_post_multipart_api(msgType, resource_id, content=""):
         'Authorization': f'Bearer {memos_accesstoken}',
     }
     response = requests.post(url, json=data, headers=headers)
-    r = json.loads(response.text)
-    memos_response_id = r["data"]["id"]
+    r = response.json()
+    memos_response_id = r["id"]
     return memos_response_id
 
 
@@ -289,3 +310,4 @@ if __name__ == "__main__":
     default_tag_data = memos_create_default_tags()
 
     app.run(host=host, port=port)
+
