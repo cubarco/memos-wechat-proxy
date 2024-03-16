@@ -21,6 +21,7 @@ app = Flask(__name__)
 
 appid = con.get('prod', 'wechat_appid')
 secret = con.get('prod', 'wechat_appsecret')
+memos_accesstoken = con.get('prod', 'memos_accesstoken')
 
 access_token = ""
 
@@ -108,14 +109,14 @@ def memos_post_api(content):
     """
     这个函数是把微信公众号用户的提交信息推送到memos，然后返回提交id。
     """
-    url = con.get('prod', 'memos_url') + "/api/memo?openId=" + \
-        con.get('prod', 'memos_openid')
-    global default_tag_data
+    global default_tag_data, memos_accesstoken
+    url = con.get('prod', 'memos_url') + "/api/v1/memo"
 
     payload = json.dumps({
         "content": "%s\n%s" % (content, default_tag_data)
     })
     headers = {
+        'Authorization': f'Bearer {memos_accesstoken}',
         'Content-Type': 'application/json'
     }
     response = requests.request("POST", url, headers=headers, data=payload)
@@ -198,8 +199,8 @@ def wechat_video(mediaId):
 
 
 def memos_post_file_api(file_name, file_path):
-    url = con.get('prod', 'memos_url') + \
-        "/api/resource/blob?openId=" + con.get('prod', 'memos_openid')
+    global memos_accesstoken
+    url = con.get('prod', 'memos_url') + "/api/v1/resource/blob"
     payload = {}
     file_type = filetype.guess(file_path)
     if file_type is None:
@@ -209,7 +210,9 @@ def memos_post_file_api(file_name, file_path):
     files = [
         ('file', (file_name, open(file_path, 'rb'), file_mime))
     ]
-    headers = {}
+    headers = {
+        'Authorization': f'Bearer {memos_accesstoken}',
+    }
 
     response = requests.request(
         "POST", url, headers=headers, data=payload, files=files)
@@ -220,7 +223,7 @@ def memos_post_file_api(file_name, file_path):
 
 
 def memos_post_multipart_api(msgType, resource_id, content=""):
-    global default_tag_data
+    global default_tag_data, memos_accesstoken
     resource_list = []
     resource_list.append(resource_id)
     if msgType == "voice":
@@ -229,23 +232,28 @@ def memos_post_multipart_api(msgType, resource_id, content=""):
     else:
         data = {"content": default_tag_data,
                 "visibility": "PRIVATE", "resourceIdList": resource_list}
-    url = con.get('prod', 'memos_url') + "/api/memo?openId=" + \
-        con.get('prod', 'memos_openid')
-    response = requests.post(url, json=data)
+    url = con.get('prod', 'memos_url') + "/api/v1/memo"
+    headers = {
+        'Authorization': f'Bearer {memos_accesstoken}',
+    }
+    response = requests.post(url, json=data, headers=headers)
     r = json.loads(response.text)
     memos_response_id = r["data"]["id"]
     return memos_response_id
 
 
 def memos_create_default_tags():
+    global memos_accesstoken
     memos_default_tags = con.get('prod', 'memos_default_tags').split(';')
     default_tag_data = ""
+    headers = {
+        'Authorization': f'Bearer {memos_accesstoken}',
+    }
     for tag in memos_default_tags:
         if tag:
             default_tag_data = default_tag_data + " #%s" % tag
             tags = {"name": tag}
-            requests.post(con.get('prod', 'memos_url') + '/api/tag?openId=' +
-                          con.get('prod', 'memos_openid'), json=tags)
+            requests.post(con.get('prod', 'memos_url') + '/api/v1/tag', json=tags, headers=headers)
     default_tag_data = default_tag_data.lstrip()
     return default_tag_data
 
